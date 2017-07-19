@@ -4,7 +4,7 @@
 
 ### Data collection
 The dataset is provided, and it is a single .csv file. 
-You can find it in folder 'resources', named as "ScrutiniFI". 
+You can find it in folder 'resources', named as "ScrutiniFI.csv". 
 
 ### Exploratory Data Analysis
 
