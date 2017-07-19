@@ -1,2 +1,16 @@
 # Referendum Costituzionale 2016
-Data Analysis built on the Italian Referendum Costituzionale (2016) results 
+
+### Problem definition
+
+### Data collection
+
+### Exploratory Data Analysis
+
+### Data Cleaning
+
+### Data pre-processing
+
+### Solution and data visualization
+
+### Conclusions
+
