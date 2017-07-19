@@ -3,6 +3,8 @@
 ### Problem definition
 
 ### Data collection
+The dataset is provided, and it is a single .csv file. 
+You can find it in folder 'resources'. 
 
 ### Exploratory Data Analysis
 
