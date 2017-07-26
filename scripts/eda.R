@@ -91,3 +91,7 @@ barplot(totalone$valore, names.arg = totalone$tipo, col=c(3,2,"grey","grey"))
 
 totalone <- data.frame(tipo=c("sì","no + non votato","altri"), valore=c(sum(dati$NUMVOTISI), sum(dati$ELETTORI) - (sum(dati$NUMVOTISI) + sum(dati$NUMVOTIBIANCHI) + sum(dati$NUMVOTINONVALIDI) + sum(dati$NUMVOTICONTESTATI)), sum(dati$NUMVOTIBIANCHI) + sum(dati$NUMVOTINONVALIDI) + sum(dati$NUMVOTICONTESTATI)))
 barplot(totalone$valore, names.arg = totalone$tipo, col=c(3,2,"grey"))
+
+
+write.csv(dati, "output/edited.csv", row.names = F)
+
