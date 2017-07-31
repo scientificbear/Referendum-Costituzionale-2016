@@ -1,0 +1,207 @@
+---
+title: "Contitutional Referendum (Italy, 2016)"
+author: "Patrick Zecchin"
+date: "July 31, 2017"
+output: 
+  html_document: 
+    fig_height: 7
+    fig_width: 9
+    theme: cosmo
+    toc: yes
+---
+
+```{r setup, echo=FALSE, warning=FALSE, message=FALSE}
+library(plyr)
+library(leaflet)
+library(knitr)
+library(ggplot2)
+library(plotly)
+```
+
+## Target
+
+In this document, we are going to performe an explorative data analysis on the Constitutional Referendum dataset.
+
+## Dataset
+
+The given dataset contains the referendum results (number of voters, vote distribution, etc.) stratified by municipality (i.e. Comune).
+
+
+```{r, echo=FALSE}
+setwd("~/GitHub/Referendum-Costituzionale-2016")
+referendum <- read.csv("~/GitHub/Referendum-Costituzionale-2016/resources/ScrutiniFI.csv",sep = ";", stringsAsFactors=FALSE, encoding="UTF-8")
+kable(t(head(referendum)))
+```
+
+The dataset has most of the basic data useful to performe an initial analysis on the referendum. Howerver, in order to gain some more insights and especially in order to be able to plot on a geographic map, we import an additional dataset (found here:  http://ckan.ancitel.it/dataset/comuni-italiani-dati-territoriali-e-demografici ).
+
+```{r, echo=FALSE}
+comuni <- read.csv("~/GitHub/Referendum-Costituzionale-2016/resources/comuniitaliani.csv",sep = ";", stringsAsFactors=FALSE, encoding="UTF-8")
+comuni$Comune <- toupper(comuni$Comune)
+comuni$Provincia <- toupper(comuni$Provincia)
+comuni$Regione <- toupper(comuni$Regione)
+kable(t(head(comuni)))
+```
+
+The dataset we will make use of is obtained by merging these two tables. In order to make this join properly working, it has been necessary to do some pre-processing on the data, reconciling the names of some municipalities. Considered the pointwise nature of this task, the operation has been done by hand.
+
+```{r, echo=FALSE}
+dati <- merge(x=referendum,
+              y=comuni,
+              by.x=c("DESCREGIONE", "DESCCOMUNE"),
+              by.y=c("Regione", "Comune"),
+              all.x=TRUE)
+
+dati <- dati[!is.na(dati$Longitudine),]
+dati <- dati[!is.na(dati$ELETTORI),]
+dati <- dati[!is.na(dati$ELETTORI_M),]
+dati <- dati[!is.na(dati$VOTANTI),]
+dati <- dati[!is.na(dati$VOTANTI_M),]
+
+# problema accenti
+
+dati$DESCREGIONE <- as.factor(dati$DESCREGIONE)
+dati$DESCPROVINCIA <- as.factor(dati$DESCPROVINCIA)
+dati$DESCCOMUNE <- as.factor(dati$DESCCOMUNE)
+
+dati$ELETTORI_F <- dati$ELETTORI - dati$ELETTORI_M
+dati$VOTANTI_F <- dati$VOTANTI - dati$VOTANTI_M
+dati$VOTI <- dati$NUMVOTISI + dati$NUMVOTINO
+dati$PERC_SI <- dati$NUMVOTISI / dati$VOTI
+dati$PERC_VOTANTI <- dati$VOTANTI / dati$ELETTORI
+dati$PERC_VOTANTI_M <- dati$VOTANTI_M / dati$ELETTORI_M
+dati$PERC_VOTANTI_F <- dati$VOTANTI_F / dati$ELETTORI_F
+dati[is.na(dati$PERC_SI),"PERC_SI"] <- 0
+
+dati$PERC_BIANCHI <- dati$NUMVOTIBIANCHI/dati$VOTANTI
+dati[is.na(dati$PERC_BIANCHI),"PERC_BIANCHI"] <- 0
+dati$PERC_NONVALIDI <- dati$NUMVOTINONVALIDI/dati$VOTANTI
+dati[is.na(dati$PERC_NONVALIDI),"PERC_NONVALIDI"] <- 0
+dati$PERC_CONTESTATI <- dati$NUMVOTICONTESTATI/dati$VOTANTI
+dati[is.na(dati$PERC_CONTESTATI),"PERC_CONTESTATI"] <- 0
+```
+
+## Plots
+
+In this section we show some exploratory plots.
+
+First, the distribution of the percentage of voters with respect to the total number of electors. As can be seen, there was generally an high rate of attendance.
+
+```{r, echo=FALSE}
+ggplot(data=dati, aes(PERC_VOTANTI)) + geom_histogram(bins = round(sqrt(length(dati$PERC_VOTANTI)))) + xlim(0, 1)
+```
+
+### Sex Distribution 
+
+For what concerns the attendance rate given sex, the next plot shows how generally males voted than females. We choose to plot also the mean value of the two population, even though they are highly skewed on the right.
+
+```{r, echo=FALSE, warning=FALSE}
+temp <- data.frame(PERC_VOTANTI=c(dati$PERC_VOTANTI_M,
+                                  dati$PERC_VOTANTI_F),
+                   SEX=c(rep('M',length(dati$PERC_VOTANTI_M)),
+                         rep('F',length(dati$PERC_VOTANTI_F))))
+
+ggplot(temp,
+       aes(x=PERC_VOTANTI, fill=SEX)) +
+  geom_histogram(alpha=.5, 
+                 position="identity", 
+                 bins = round(sqrt(length(dati$PERC_VOTANTI)))) +
+  geom_vline(data=ddply(temp, "SEX", summarise, perc.mean=mean(PERC_VOTANTI)),
+             aes(xintercept=perc.mean, colour=SEX),
+             linetype="dotted",
+             size=1) +
+  xlim(0, 1) + 
+  theme(legend.position="bottom")
+```
+
+We tested the difference between the two means using a t-test, which confirm the conjecture based on the histogram. 
+
+```{r, echo=FALSE, warning=FALSE}
+t.test(x=(dati$VOTANTI_M / dati$ELETTORI_M), y=(dati$VOTANTI_F / dati$ELETTORI_F))
+```
+
+### Vote distribution
+
+The following plot exibits the vote distrubution, stratified by geographic area. It is possible to see how generally the number of Pro is not above the 50% of the total. The two main exceptions are the central and the nord-east regions.
+
+```{r, echo=FALSE, warning=FALSE}
+ggplotly(
+ggplot(dati,
+       aes(x=PERC_SI, fill=AreaGeo)) +
+  geom_histogram(alpha=.3, 
+                 position="identity", 
+                 bins = round(sqrt(length(dati$PERC_SI)))) +
+  xlim(0, 1) + 
+  theme(legend.position="bottom") )
+```
+
+```{r, echo=FALSE, warning=FALSE}
+temp <- data.frame(PERC_VOTI = c(dati$PERC_BIANCHI,
+                                 dati$PERC_CONTESTATI, 
+                                 dati$PERC_NONVALIDI),
+                   TIPO = c(rep('bianchi', length(dati$PERC_BIANCHI)),
+                            rep('contestati', length(dati$PERC_CONTESTATI)),
+                            rep('non validi', length(dati$PERC_NONVALIDI))) )
+ggplotly(
+ggplot(temp, 
+       aes(x=PERC_VOTI, fill=TIPO)) +
+  geom_histogram(alpha=.5, 
+                 position="identity", 
+                 bins = round(sqrt(length(temp$PERC_VOTI)/3))) + 
+  xlim(-0.001, 0.03) + 
+  theme(legend.position="bottom"))
+
+```
+
+The number of not blank, contested or not valid votes is generally very low (as expected). If we consider for example the municipalities where the percentage of not valid votes is higher than 5% (that is, in the right tail of the distribution), we can observe they are not really outliers. Instead, this "high" value is probably due to the low number of possible voters.
+
+```{r, echo=FALSE, warning=FALSE}
+kable(t(dati[dati$PERC_NONVALIDI>.05,c("DESCREGIONE","DESCCOMUNE","ELETTORI","VOTANTI","NUMVOTISI", "NUMVOTINO","NUMVOTIBIANCHI","NUMVOTINONVALIDI", "NUMVOTICONTESTATI", "ClasseComune","PERC_NONVALIDI")]))
+```
+
+### Geographic distribution
+
+The next geographic map highlight how the Pros and the Cons are distributed. The main (restricted) areas where the Pros win are in Toscana, Emilia Romagna and Trentino - Alto Adige.
+
+More maps are available in the Tableau file.
+
+```{r, echo=FALSE, warning=FALSE}
+m <- leaflet() %>%
+      setView(lng = 12.567380, lat = 41.871940, zoom = 6) %>% 
+      addProviderTiles('CartoDB.Positron')
+pal <- colorNumeric(
+  palette = c("red","yellow","green"),
+  domain = dati$PERC_SI)
+
+m  %>%  addCircleMarkers(data = dati,lat = dati$Latitudine, lng = dati$Longitudine,
+  radius = sqrt(dati$VOTANTI/mean(dati$VOTANTI)),
+  color = ~pal(PERC_SI),
+  stroke = FALSE, fillOpacity = 0.5,
+  popup = paste("comune: ", dati$DESCCOMUNE, "<br>",
+    "votanti: ", dati$VOTANTI, "<br>",
+    "percvotanti: ", round(100*dati$PERC_VOTANTI), "%<br>", 
+    "num voti si: ", dati$NUMVOTISI, "<br>",
+    "perc si: ", round(100*dati$PERC_SI), "%",
+    sep="")
+) %>% addLegend("bottomright", pal = pal, values = dati$PERC_SI,
+            title = "PERC_SI",
+            opacity = 1
+)
+```
+
+### Aggregated
+
+```{r, echo=FALSE, warning=FALSE}
+dati_regione <- aggregate(.  ~ DESCREGIONE, dati[,c("ELETTORI","VOTANTI","NUMVOTISI","DESCREGIONE")], sum)
+dati_regione$PERC_VOTANTI <- dati_regione$VOTANTI/dati_regione$ELETTORI
+dati_regione$PERC_SI <- dati_regione$NUMVOTISI/dati_regione$VOTANTI
+kable(dati_regione)
+```
+
+The next two plots display the national distribution of the votes. More than 13 million voters (one over three) didn't expressed an opinion. 
+
+```{r, echo=FALSE, warning=FALSE}
+totalone <- data.frame(tipo=c("pro","con","other","not expressed"), valore=c(sum(dati$NUMVOTISI), sum(dati$NUMVOTINO), sum(dati$NUMVOTIBIANCHI) + sum(dati$NUMVOTINONVALIDI) + sum(dati$NUMVOTICONTESTATI), sum(dati$ELETTORI) - (sum(dati$NUMVOTISI) + sum(dati$NUMVOTINO) + sum(dati$NUMVOTIBIANCHI) + sum(dati$NUMVOTINONVALIDI) + sum(dati$NUMVOTICONTESTATI))
+))
+barplot(totalone$valore, names.arg = totalone$tipo, col=c(3,2,"grey","grey"), xlab="vote", ylab="# preferences")
+```

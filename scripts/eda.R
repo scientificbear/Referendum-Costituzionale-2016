@@ -1,3 +1,7 @@
+library(plyr)
+library(leaflet)
+library(knitr)
+
 setwd("~/GitHub/Referendum-Costituzionale-2016")
 referendum <- read.csv("resources/ScrutiniFI.csv",sep = ";", stringsAsFactors=FALSE, encoding="UTF-8")
 head(referendum)
@@ -60,20 +64,28 @@ abline(v=mean(dati$PERC_VOTANTI_F), col=2, lwd=3)
 abline(v=median(dati$PERC_VOTANTI_F), col=3, lwd=3)
 par(mfrow=c(1,1))
 
+temp <- data.frame(PERC_VOTANTI=c(dati$PERC_VOTANTI_M,dati$PERC_VOTANTI_F), SEX=c(rep('M',length(dati$PERC_VOTANTI_M)),rep('F',length(dati$PERC_VOTANTI_F))))
+
+ggplot(data=dati, aes(PERC_VOTANTI)) + geom_histogram(bins = round(sqrt(length(dati$PERC_VOTANTI)))) + xlim(0, 1)
+
+ggplot(temp, aes(x=PERC_VOTANTI, fill=SEX)) +
+  geom_histogram(alpha=.5, position="identity", bins = round(sqrt(length(dati$PERC_VOTANTI)))) +
+  geom_vline(data=ddply(temp, "SEX", summarise, perc.mean=mean(PERC_VOTANTI)), aes(xintercept=perc.mean,  colour=SEX),
+             linetype="dotted", size=1) + xlim(0, 1) + theme(legend.position="bottom")
+
 # more than 100% because you can not vote in your polling station
 
 t.test(x=(dati$VOTANTI_M / dati$ELETTORI_M), y=(dati$VOTANTI_F / dati$ELETTORI_F))
 
-par(mfrow=c(3,2))
-hist(dati$NUMVOTIBIANCHI, nclass = round(sqrt(length(dati$NUMVOTIBIANCHI))))
-hist(dati$PERC_BIANCHI, nclass = round(sqrt(length(dati$NUMVOTIBIANCHI))))
-hist(dati$NUMVOTINONVALIDI, nclass = round(sqrt(length(dati$NUMVOTINONVALIDI))))
-hist(dati$PERC_NONVALIDI, nclass = round(sqrt(length(dati$NUMVOTINONVALIDI))))
-hist(dati$NUMVOTICONTESTATI, nclass = round(sqrt(length(dati$NUMVOTICONTESTATI))))
-hist(dati$PERC_CONTESTATI, nclass = round(sqrt(length(dati$NUMVOTICONTESTATI))))
-par(mfrow=c(1,1))
+temp <- data.frame(PERC_VOTI = c(dati$PERC_BIANCHI, dati$PERC_CONTESTATI, dati$PERC_NONVALIDI),
+                   TIPO = c(rep('bianchi', length(dati$PERC_BIANCHI)),
+                            rep('contestati', length(dati$PERC_CONTESTATI)),
+                            rep('non validi', length(dati$PERC_NONVALIDI))) )
+ggplot(temp, aes(x=PERC_VOTI, fill=TIPO)) +
+  geom_histogram(alpha=.5, position="identity", bins = round(sqrt(length(temp$PERC_VOTI)/3))) + xlim(-0.001, 0.03) + theme(legend.position="bottom")
 
-View(dati[dati$PERC_NONVALIDI>.05,]) # probably because low number of voters
+
+View(dati[dati$PERC_NONVALIDI>.05,c("DESCREGIONE","DESCCOMUNE","ELETTORI","VOTANTI","NUMVOTISI", "NUMVOTINO","NUMVOTIBIANCHI","NUMVOTINONVALIDI", "NUMVOTICONTESTATI", "ClasseComune")]) # probably because low number of voters
 
 dati_regione <- aggregate(.  ~ DESCREGIONE, dati[,c("ELETTORI","VOTANTI","NUMVOTISI","DESCREGIONE")], sum)
 dati_regione$PERC_VOTANTI <- dati_regione$VOTANTI/dati_regione$ELETTORI
@@ -92,6 +104,27 @@ barplot(totalone$valore, names.arg = totalone$tipo, col=c(3,2,"grey","grey"))
 totalone <- data.frame(tipo=c("sì","no + non votato","altri"), valore=c(sum(dati$NUMVOTISI), sum(dati$ELETTORI) - (sum(dati$NUMVOTISI) + sum(dati$NUMVOTIBIANCHI) + sum(dati$NUMVOTINONVALIDI) + sum(dati$NUMVOTICONTESTATI)), sum(dati$NUMVOTIBIANCHI) + sum(dati$NUMVOTINONVALIDI) + sum(dati$NUMVOTICONTESTATI)))
 barplot(totalone$valore, names.arg = totalone$tipo, col=c(3,2,"grey"))
 
+m <- leaflet() %>%
+      setView(lng = 12.567380, lat = 41.871940, zoom = 6) %>% 
+      addProviderTiles('CartoDB.Positron')
+pal <- colorNumeric(
+  palette = c("red","yellow","green"),
+  domain = dati$PERC_SI)
+
+m  %>%  addCircleMarkers(data = dati,lat = dati$Latitudine, lng = dati$Longitudine,
+  radius = sqrt(dati$VOTANTI/mean(dati$VOTANTI)),
+  color = ~pal(PERC_SI),
+  stroke = FALSE, fillOpacity = 0.5,
+  popup = paste("comune: ", dati$DESCCOMUNE, "<br>",
+    "votanti: ", dati$VOTANTI, "<br>",
+    "percvotanti: ", round(100*dati$PERC_VOTANTI), "%<br>", 
+    "num voti si: ", dati$NUMVOTISI, "<br>",
+    "perc si: ", round(100*dati$PERC_SI), "%",
+    sep="")
+) %>% addLegend("bottomright", pal = pal, values = dati$PERC_SI,
+            title = "PERC_SI",
+            opacity = 1
+)
 
 write.csv(dati, "output/edited.csv", row.names = F)
 
